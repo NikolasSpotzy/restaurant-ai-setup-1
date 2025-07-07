@@ -192,6 +192,11 @@
             background: #0f2e85;
         }
         
+        .btn-primary:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
         .btn-secondary {
             background: #6c757d;
             color: white;
@@ -878,12 +883,15 @@
 
             <div class="action-buttons">
                 <button type="button" class="btn btn-secondary" onclick="exportData()">📄 Εξαγωγή Δεδομένων</button>
-                <button type="submit" class="btn btn-primary">🚀 Δημιουργία AI Agent</button>
+                <button type="submit" class="btn btn-primary" id="createAgentBtn">🚀 Δημιουργία AI Agent</button>
             </div>
         </form>
     </div>
 
     <script>
+        // 🔧 WEBHOOK CONFIGURATION - Replace with your Make.com webhook URL
+        const WEBHOOK_URL = 'https://hook.eu2.make.com/https://hook.eu2.make.com/xwn7a3axq1spniedpg5edaglyvj2o1yh';
+        
         // Update checkbox styles
         function updateCheckboxStyles() {
             try {
@@ -932,7 +940,90 @@
             }
         }
 
-        // Export form data
+        // 📊 Process form data into structured object
+        function processFormData() {
+            const form = document.getElementById('restaurantForm');
+            const formData = new FormData(form);
+            const data = {};
+            
+            // Get all form fields
+            for (let [key, value] of formData.entries()) {
+                if (data[key]) {
+                    if (Array.isArray(data[key])) {
+                        data[key].push(value);
+                    } else {
+                        data[key] = [data[key], value];
+                    }
+                } else {
+                    data[key] = value;
+                }
+            }
+            
+            // Process table data
+            const tableIds = data['table-id[]'] || [];
+            const tableCapacities = data['table-capacity[]'] || [];
+            const tableSections = data['table-section[]'] || [];
+            const tableSectionOther = data['table-section-other[]'] || [];
+            const tableLocations = data['table-location[]'] || [];
+            const tableLocationOther = data['table-location-other[]'] || [];
+            const tableTypes = data['table-type[]'] || [];
+            const tableTypeOther = data['table-type-other[]'] || [];
+            const tableSmoking = data['table-smoking[]'] || [];
+            
+            data.tables = [];
+            for (let i = 0; i < tableIds.length; i++) {
+                if (tableIds[i] && tableCapacities[i]) {
+                    const section = tableSections[i] === 'Other' ? (tableSectionOther[i] || '') : (tableSections[i] || '');
+                    const location = tableLocations[i] === 'Other' ? (tableLocationOther[i] || '') : (tableLocations[i] || '');
+                    const type = tableTypes[i] === 'Other' ? (tableTypeOther[i] || '') : (tableTypes[i] || '');
+                    
+                    data.tables.push({
+                        id: tableIds[i],
+                        capacity: parseInt(tableCapacities[i]) || 0,
+                        section: section,
+                        location: location,
+                        type: type,
+                        smoking: tableSmoking[i] || ''
+                    });
+                }
+            }
+            
+            // Process SMS content
+            data.smsContent = {};
+            if (data['sms-confirmation-text']) data.smsContent.confirmation = data['sms-confirmation-text'];
+            if (data['sms-reminder-text']) data.smsContent.reminder = data['sms-reminder-text'];
+            if (data['sms-thank-you-text']) data.smsContent.thankYou = data['sms-thank-you-text'];
+            if (data['sms-birthday-text']) data.smsContent.birthday = data['sms-birthday-text'];
+            if (data['sms-promo-text']) data.smsContent.promotional = data['sms-promo-text'];
+            if (data['sms-followup-text']) data.smsContent.followUp = data['sms-followup-text'];
+            if (data['sms-special-text']) data.smsContent.specialOccasion = data['sms-special-text'];
+            if (data['sms-cancellation-text']) data.smsContent.cancellation = data['sms-cancellation-text'];
+            
+            // Process SMS services selection
+            const smsServices = data['sms-services'] || [];
+            data.smsServices = Array.isArray(smsServices) ? smsServices : [smsServices];
+            
+            // Clean up processed fields
+            const fieldsToDelete = [
+                'table-id[]', 'table-capacity[]', 'table-section[]', 'table-section-other[]',
+                'table-location[]', 'table-location-other[]', 'table-type[]', 'table-type-other[]',
+                'table-smoking[]', 'sms-confirmation-text', 'sms-reminder-text', 'sms-thank-you-text', 
+                'sms-birthday-text', 'sms-promo-text', 'sms-followup-text', 'sms-special-text', 
+                'sms-cancellation-text', 'sms-services'
+            ];
+            
+            fieldsToDelete.forEach(field => delete data[field]);
+            
+            // Add metadata
+            data.submission_timestamp = new Date().toISOString();
+            data.submission_date = new Date().toLocaleDateString('el-GR');
+            data.form_version = '2.0';
+            data.source = 'Restaurant AI Setup Form';
+            
+            return data;
+        }
+
+        // 📄 Export form data as JSON (existing functionality)
         function exportData() {
             try {
                 const form = document.getElementById('restaurantForm');
@@ -941,76 +1032,7 @@
                     return;
                 }
                 
-                const formData = new FormData(form);
-                const data = {};
-                
-                // Get all form fields
-                for (let [key, value] of formData.entries()) {
-                    if (data[key]) {
-                        if (Array.isArray(data[key])) {
-                            data[key].push(value);
-                        } else {
-                            data[key] = [data[key], value];
-                        }
-                    } else {
-                        data[key] = value;
-                    }
-                }
-                
-                // Process table data safely
-                const tableIds = data['table-id[]'] || [];
-                const tableCapacities = data['table-capacity[]'] || [];
-                const tableSections = data['table-section[]'] || [];
-                const tableSectionOther = data['table-section-other[]'] || [];
-                const tableLocations = data['table-location[]'] || [];
-                const tableLocationOther = data['table-location-other[]'] || [];
-                const tableTypes = data['table-type[]'] || [];
-                const tableTypeOther = data['table-type-other[]'] || [];
-                const tableSmoking = data['table-smoking[]'] || [];
-                
-                data.tables = [];
-                for (let i = 0; i < tableIds.length; i++) {
-                    if (tableIds[i] && tableCapacities[i]) {
-                        const section = tableSections[i] === 'Other' ? (tableSectionOther[i] || '') : (tableSections[i] || '');
-                        const location = tableLocations[i] === 'Other' ? (tableLocationOther[i] || '') : (tableLocations[i] || '');
-                        const type = tableTypes[i] === 'Other' ? (tableTypeOther[i] || '') : (tableTypes[i] || '');
-                        
-                        data.tables.push({
-                            id: tableIds[i],
-                            capacity: parseInt(tableCapacities[i]) || 0,
-                            section: section,
-                            location: location,
-                            type: type,
-                            smoking: tableSmoking[i] || ''
-                        });
-                    }
-                }
-                
-                // Process SMS content safely
-                data.smsContent = {};
-                if (data['sms-confirmation-text']) data.smsContent.confirmation = data['sms-confirmation-text'];
-                if (data['sms-reminder-text']) data.smsContent.reminder = data['sms-reminder-text'];
-                if (data['sms-thank-you-text']) data.smsContent.thankYou = data['sms-thank-you-text'];
-                if (data['sms-birthday-text']) data.smsContent.birthday = data['sms-birthday-text'];
-                if (data['sms-promo-text']) data.smsContent.promotional = data['sms-promo-text'];
-                if (data['sms-followup-text']) data.smsContent.followUp = data['sms-followup-text'];
-                if (data['sms-special-text']) data.smsContent.specialOccasion = data['sms-special-text'];
-                if (data['sms-cancellation-text']) data.smsContent.cancellation = data['sms-cancellation-text'];
-                
-                // Process SMS services selection
-                const smsServices = data['sms-services'] || [];
-                data.smsServices = Array.isArray(smsServices) ? smsServices : [smsServices];
-                
-                // Clean up processed fields
-                const fieldsToDelete = [
-                    'table-id[]', 'table-capacity[]', 'table-section[]', 'table-section-other[]',
-                    'table-location[]', 'table-location-other[]', 'table-type[]', 'table-type-other[]',
-                    'table-smoking[]', 'sms-confirmation-text', 'sms-reminder-text', 'sms-thank-you-text', 
-                    'sms-birthday-text', 'sms-promo-text', 'sms-followup-text', 'sms-special-text', 
-                    'sms-cancellation-text', 'sms-services'
-                ];
-                
-                fieldsToDelete.forEach(field => delete data[field]);
+                const data = processFormData();
                 
                 // Create downloadable JSON
                 const dataStr = JSON.stringify(data, null, 2);
@@ -1023,9 +1045,92 @@
                 link.click();
                 
                 URL.revokeObjectURL(url);
+                
+                alert('📄 Το JSON file κατεβήκε επιτυχώς!');
+                
             } catch (error) {
                 console.log('Error in exportData:', error);
                 alert('Error exporting data. Please check the console for details.');
+            }
+        }
+
+        // ✅ Validate required fields
+        function validateRequiredFields() {
+            const requiredFields = [
+                'restaurant-name', 'location', 'concept', 'cuisine-type', 
+                'atmosphere', 'personality-style', 'opening-days', 
+                'service-hours', 'reservation-hours'
+            ];
+            
+            const missingFields = [];
+            
+            for (let fieldName of requiredFields) {
+                const element = document.getElementById(fieldName);
+                if (!element || !element.value.trim()) {
+                    missingFields.push(fieldName);
+                }
+            }
+            
+            return missingFields;
+        }
+
+        // 🚀 NEW: Create AI Agent function - Send data to webhook
+        async function createAgent() {
+            try {
+                // Validate required fields
+                const missingFields = validateRequiredFields();
+                if (missingFields.length > 0) {
+                    alert('⚠️ Παρακαλώ συμπληρώστε όλα τα υποχρεωτικά πεδία που είναι σημειωμένα με (*) πριν συνεχίσετε.\n\nΛείπουν: ' + missingFields.join(', '));
+                    return;
+                }
+                
+                // Check webhook URL configuration
+                if (WEBHOOK_URL === 'https://hook.eu2.make.com/https://hook.eu2.make.com/xwn7a3axq1spniedpg5edaglyvj2o1yh') {
+                    alert('⚠️ Το webhook URL δεν έχει ρυθμιστεί ακόμα. Παρακαλώ επικοινωνήστε με τον διαχειριστή.');
+                    return;
+                }
+                
+                // Show loading state
+                const button = document.getElementById('createAgentBtn');
+                const originalText = button.innerHTML;
+                button.innerHTML = '⏳ Αποστολή δεδομένων...';
+                button.disabled = true;
+                
+                // Process form data
+                const data = processFormData();
+                
+                // Send to Make.com webhook
+                console.log('Sending data to webhook:', WEBHOOK_URL);
+                console.log('Data:', data);
+                
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    // Success response
+                    alert('🎉 Επιτυχία!\n\nΗ αίτησή σας για δημιουργία AI Agent στάλθηκε επιτυχώς!\n\nΘα επικοινωνήσουμε μαζί σας σύντομα για τα επόμενα βήματα.');
+                    
+                    // Optional: Reset form or redirect
+                    // form.reset();
+                    // window.location.href = 'thank-you.html';
+                    
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+            } catch (error) {
+                console.error('Error sending data to webhook:', error);
+                alert('❌ Υπήρξε πρόβλημα στην αποστολή των δεδομένων.\n\nΠαρακαλώ δοκιμάστε ξανά ή επικοινωνήστε μαζί μας απευθείας.\n\nΣφάλμα: ' + error.message);
+            } finally {
+                // Reset button state
+                const button = document.getElementById('createAgentBtn');
+                button.innerHTML = '🚀 Δημιουργία AI Agent';
+                button.disabled = false;
             }
         }
 
@@ -1146,13 +1251,13 @@
             }
         }
 
-        // Form submission
+        // 🔄 Form submission - Updated to call createAgent()
         document.getElementById('restaurantForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            alert('Τα δεδομένα είναι έτοιμα για δημιουργία AI Agent! Χρησιμοποιήστε "Εξαγωγή Δεδομένων" για να τα αποθηκεύσετε.');
+            createAgent();
         });
 
-        // Event listeners
+        // Event listeners for initial setup
         document.addEventListener('DOMContentLoaded', function() {
             try {
                 // Add event listeners to checkboxes
@@ -1178,6 +1283,10 @@
                 // Initial setup
                 updateCheckboxStyles();
                 handleSMSContent();
+                
+                console.log('🚀 Restaurant AI Setup Form loaded successfully!');
+                console.log('Webhook URL configured:', WEBHOOK_URL !== 'https://hook.eu2.make.com/https://hook.eu2.make.com/xwn7a3axq1spniedpg5edaglyvj2o1yh' ? '✅ Ready' : '⚠️ Needs configuration');
+                
             } catch (error) {
                 console.log('Error in DOMContentLoaded:', error);
             }
